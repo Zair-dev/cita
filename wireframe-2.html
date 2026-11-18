@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orbital Deck — Wireframe 2</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      height: 100vh;
+      overflow: hidden;
+      background: #fff;
+      color: #111;
+      font-family: system-ui, sans-serif;
+    }
+
+    /* Planeta: solo un círculo */
+    .planet {
+      position: fixed;
+      left: 50%; top: 50%;
+      width: 320px; height: 320px;
+      margin: -160px 0 0 -160px;
+      border: 2px solid #111;
+      border-radius: 50%;
+      transition: opacity 0.6s, transform 0.6s;
+    }
+    body.focus .planet { opacity: 0.08; transform: scale(0.8); }
+
+    /* Pestañas */
+    .slide {
+      position: fixed;
+      border: 2px solid #111;
+      background: #fff;
+      padding: 12px;
+      cursor: pointer;
+      overflow: hidden;
+      transition:
+        left 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+        top 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+        width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+        height 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+        filter 0.6s, opacity 0.6s;
+    }
+    .slide.main { border-width: 3px; }
+    .slide h2 { font-size: 12px; font-weight: 600; transition: font-size 0.6s; }
+    .lines i { display: block; height: 6px; background: #ddd; margin-top: 8px; }
+
+    /* Modo foco: las laterales se ven difuminadas, la activa nítida */
+    body.focus .slide { filter: blur(4px); opacity: 0.5; }
+    body.focus .slide.active { filter: none; opacity: 1; cursor: default; }
+    body.focus .slide.far { opacity: 0; pointer-events: none; }
+    body.focus .slide.active h2 { font-size: 22px; }
+
+    .back {
+      position: fixed;
+      top: 16px; right: 16px;
+      z-index: 50;
+      padding: 6px 12px;
+      border: 2px solid #111;
+      background: #fff;
+      font: inherit;
+      cursor: pointer;
+      display: none;
+    }
+    body.focus .back { display: block; }
+
+    .hint {
+      position: fixed;
+      bottom: 16px; left: 0; right: 0;
+      text-align: center;
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="planet"></div>
+  <button class="back" id="back">✕ Volver</button>
+  <div class="hint" id="hint">Haz clic en la pestaña central</div>
+
+  <script>
+    const labels = ['Main View', 'Slide 1', 'Slide 2', 'Slide 3', 'Slide 4', 'Slide 5', 'Slide 6'];
+    let mode = 'orbit';   // 'orbit' | 'focus'
+    let active = 0;       // índice de la pestaña en primer plano
+
+    // Crear las pestañas
+    const slides = labels.map((text, i) => {
+      const el = document.createElement('div');
+      el.className = 'slide' + (i === 0 ? ' main' : '');
+      el.innerHTML = `<h2>${text}</h2>
+        <div class="lines"><i style="width:80%"></i><i style="width:60%"></i><i style="width:70%"></i></div>`;
+      el.addEventListener('click', (e) => { e.stopPropagation(); onSlideClick(i); });
+      document.body.appendChild(el);
+      return el;
+    });
+
+    // Coloca una pestaña por su centro (x, y) con un tamaño (w, h)
+    function place(el, x, y, w, h) {
+      el.style.left = (x - w / 2) + 'px';
+      el.style.top = (y - h / 2) + 'px';
+      el.style.width = w + 'px';
+      el.style.height = h + 'px';
+    }
+
+    function layout() {
+      const W = innerWidth, H = innerHeight;
+      const cx = W / 2, cy = H / 2;
+
+      if (mode === 'orbit') {
+        // Central encima del planeta + 6 alrededor en elipse
+        const rx = Math.min(W * 0.38, 440);
+        const ry = Math.min(H * 0.36, 300);
+        slides.forEach((el, i) => {
+          el.classList.remove('active', 'far');
+          el.style.zIndex = i === 0 ? 20 : 10;
+          if (i === 0) return place(el, cx, cy, 240, 150);
+          const a = ((i - 1) / 6) * Math.PI * 2 - Math.PI / 2;
+          place(el, cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, 150, 95);
+        });
+      } else {
+        // Carrusel: activa grande en el centro, vecinas cortadas en los bordes
+        const w = Math.min(W * 0.7, 1000);
+        const h = Math.min(H * 0.65, w * 0.55, 560);   // siempre apaisada, como el boceto
+        const gap = 40;
+        const n = slides.length;
+        slides.forEach((el, i) => {
+          let k = ((i - active) % n + n) % n;   // distancia circular a la activa
+          if (k > n / 2) k -= n;                 // ...con signo: izquierda (-) o derecha (+)
+          place(el, cx + k * (w + gap), cy, w, h);
+          el.classList.toggle('active', k === 0);
+          el.classList.toggle('far', Math.abs(k) > 1);   // las lejanas, invisibles
+          el.style.zIndex = 30 - Math.abs(k);
+        });
+      }
+      document.body.classList.toggle('focus', mode === 'focus');
+      document.getElementById('hint').textContent = mode === 'focus'
+        ? 'Clic en una lateral o ← → para cambiar · Esc para volver'
+        : 'Haz clic en la pestaña central';
+    }
+
+    function onSlideClick(i) {
+      if (mode === 'orbit') {
+        if (i !== 0) return;          // solo la pestaña del planeta abre el foco
+        mode = 'focus';
+        active = 0;
+      } else if (i !== active) {
+        active = i;                   // clic en una lateral → pasa al centro
+      }
+      layout();
+    }
+
+    function close() { mode = 'orbit'; layout(); }
+    function step(d) {
+      if (mode !== 'focus') return;
+      active = (active + d + slides.length) % slides.length;
+      layout();
+    }
+
+    document.getElementById('back').addEventListener('click', (e) => { e.stopPropagation(); close(); });
+    document.body.addEventListener('click', () => { if (mode === 'focus') close(); }); // clic en el fondo
+    addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close();
+      if (e.key === 'ArrowRight') step(1);
+      if (e.key === 'ArrowLeft') step(-1);
+    });
+    addEventListener('resize', layout);
+    layout();
+  </script>
+</body>
+</html>
